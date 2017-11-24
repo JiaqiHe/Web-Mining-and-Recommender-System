@@ -1,0 +1,129 @@
+\documentclass[a4paper]{article}
+
+\usepackage{geometry}
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[colorinlistoftodos]{todonotes}
+\usepackage{pythonhighlight}
+\renewcommand{\baselinestretch}{1.2}
+\title{CSE 258 Assignment 1}
+
+\author{Jiaqi He}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+
+\section{Visit Prediction}
+\label{sec:visit}
+
+\subsection{Problem}
+Predict given a (user,business) pair from 'pairs\_Visit.txt' whether the user visited the business (really, whether it was one of the business they reviewed). Accuracy will be measured in terms of the categorization accuracy (1 minus the Hamming loss). The test set has been constructed such that exactly 50\% of the pairs correspond to visited business and the other 50\% do not. Performance will be measured in terms of the fraction of correct classifications.
+
+\subsection{Solution}
+\subsubsection{Baseline - Based on Ratio}
+Find the most popular businesses that account for 50\% of visits in the training data. Return '1' whenever such a business is seen at test time, '0' otherwise.
+
+\subsubsection{Baseline - Based on Type}
+Users may tend to repeatedly visit business of the same type. Build a baseline that returns '1' if a user has visited a business of the same category before (at least one category in common), or '0' otherwise.\par
+The accuracy of this model on the test set on Kaggle is 0.66490.
+
+\subsubsection{Latent Factor Model}
+We can also use Latent Factor Model to predict visit. However, this model doesn't perform that well for this visit prediction. Hence, we don't give implementation details about latent factor model here. More details about Latent Factor Model would be covered in next problem: rating prediction.\\
+Our goal is the following:
+\begin{equation}
+visit(user, item) \simeq \alpha + \beta_{u} + \beta_{i} + \gamma_{u} \cdot \gamma_{i}
+\end{equation}
+where $\alpha$ represents the global average visit, $\beta_{u}$ represents visit deviation of user u, $\beta_{i}$ represents visit deviation of business i, $\gamma_{u}$ and $\gamma_{i}$represents latent factors.\\
+Our prediction threshold is set to be 0.5, namely, if prediction is greater than 0.5, we then predict '1'; if prediction is less than or equal to 0.5, we predict '0'.\\
+In such a way, we get 0.70231 score on Kaggle. Below is the code for this approach.\\
+\inputpython{visit_lfm.py}{1}{147}
+
+\subsubsection{k-Nearest Neighbor Algorithm}
+k-Nearest Neighbor Algorithm is one of the most powerful recommendation methods.Based on the history of businesses that a user visited and the history of visits to a business, this model predicts new possible visits.\\
+The idea is as follows:\\
+\begin{enumerate}
+\item For each user-business pair $(u,b)$ that we need to predict, we first find this user's $k$ nearest neighbors, namely the top $k$ users who behave similarly the most as this user.We then have a clustering of users with size of $k$. We denote this clustering as $U_{similar}$.
+\item Then we start to find the history of visits of this clustering. We denote the set of all businesses that are visited by this clustering as $B_{visited}$.
+\item If the business $b$ in the pair is within $B_{visited}$, we then return '1', otherwise we return '0'.
+\end{enumerate}
+Here we use cosine similarity to find similar users. Cosine similarity is defined as
+\begin{equation}
+sim(A,B)=\frac{A \cdot B}{\parallel A \parallel \parallel B \parallel}
+\end{equation}
+For two users, we get their history of visits. Hence, $A \cdot B$ is the intersection of these two sets, and $\parallel$ A $\parallel$ is the square root of the size A, and $\parallel$ B $\parallel$ is the square root of the size B.\\
+In this problem, we first set $k = 50$, namely we want to find top 50 users that are similar to the user we want to predict. Then we gather all businesses that these 50 users visit to be $B_{visited}$.\\
+Finally, we check if $b$ is in $B_{visited}$. For this model, we achieve 0.75380 score on Kaggle.\\
+If we set $k = 500$, namely we want to find top 500 users that are similar to the user we want to predict. Then we gather all businesses that these 500 users visit to be $B_{visited}$. Then we achieve \textbf{0.87024} score on Kaggle, which is better than the previous case.\\
+Below is the code for this model.
+\inputpython{visit_knn.py}{1}{102}
+
+
+\newpage
+
+\section{Rating Prediction}
+\label{sec:rating}
+
+\subsection{Problem}
+Predict people's star ratings as accurately as possible, for those (user,item) pairs in 'pairs\_Rating.txt'. Accuracy will be measured in terms of the (root) mean-squared error (RMSE).
+
+\subsection{Solution}
+\subsubsection{Baseline - Global Average}
+Return the global average rating, or the user's average if we have seen them before in the training data.
+\begin{equation}
+rating(user, item) = \alpha
+\end{equation}
+
+\subsubsection{Baseline - Linear Model}
+Fit a predictor of the form
+\begin{equation}
+rating(user, item) \simeq \alpha + \beta_{u} + \beta_{i}
+\end{equation}
+by fitting the mean and the two bias terms as described in the lecture notes.
+
+\subsubsection{Latent Factor Model}
+Our goal is the following:
+\begin{equation}
+rating(user, item) \simeq \alpha + \beta_{u} + \beta_{i} + \gamma_{u} \cdot \gamma_{i}
+\end{equation}
+where $\alpha$ represents the global average rating, $\beta_{u}$ represents rating deviation of user u, $\beta_{i}$ represents rating deviation of business i, $\gamma_{u}$ and $\gamma_{i}$represents latent factors.\\
+In this model, we not only consider independent factors like $\beta_u, \beta_i$, but also consider interactive factors $\gamma_u, and \gamma_i$, which would yield more accurate model.\\
+The steps are as follows:\\
+\begin{enumerate}
+\item Set initial values for $\alpha, \beta_u, \beta_i, \gamma_u, \gamma_i$. To begin with, we can utilize results in Homework 3, we know that the global average is roughly 4.2, so we set $\alpha = 4.2$ to begin. For $\beta_u, \beta_i$, they are set to be 0 for each user and item. For $\gamma_u, \gamma_i$, we use random function to create a matrix to start.
+\item Iterate and update parameters until convergence.
+\item Use this latent factor model to make predictions.
+\end{enumerate}
+Our optimization goal is 
+\begin{equation}\label{goal}
+arg min_{\alpha,\beta,\gamma}\sum_{u,i}(\alpha+\beta_u+\beta_i+\gamma_u \cdot \gamma_i - R_{u,i})^2 + \lambda[\sum_u \beta_u^2 +\sum_i \beta_i^2 + \sum_i \parallel \gamma_i \parallel_2^2 + \sum_u \parallel \gamma_u \parallel_2^2]
+\end{equation}
+If we take the derivative of the equation \ref{goal} seperately in terms of $\alpha, \beta_u, \beta_i, \gamma_u, \gamma_i$, we would get
+\begin{equation}
+\alpha = \frac{\sum_{u,i}(R_{u,i}-\beta_u-\beta_i-\gamma_u \cdot \gamma_i)}{N_{train}}
+\end{equation}
+\begin{equation}
+\beta_u = \frac{\sum_{i \in I_u}(R_{u,i}-\alpha-\beta_i-\gamma_u \cdot \gamma_i)}{\lambda + \left| I_u \right|}
+\end{equation}
+\begin{equation}
+\beta_i = \frac{\sum_{u \in U_i}(R_{u,i}-\alpha-\beta_u-\gamma_u \cdot \gamma_i)}{\lambda + \left| U_i \right|}
+\end{equation}
+\begin{equation}
+\gamma_u = \frac{\sum_{i \in I_u}(R_{u,i}-\alpha - \beta_u-\beta_i)\gamma_i}{\lambda+\sum_{i \in I_u}\gamma_i^2}
+\end{equation}
+\begin{equation}
+\gamma_i = \frac{\sum_{u \in U_i}(R_{u,i}-\alpha - \beta_u-\beta_i)\gamma_u}{\lambda+\sum_{u \in U_i}\gamma_u^2}
+\end{equation}
+For each iteration, we modify $\alpha, \beta_u, \beta_i, \gamma_u, \gamma_i$ using equations above. We keep iterating them until convergence.\\
+When we first set $\lambda = 1$ and iteration times to be 100, we have found that the model starts to converge at approximately 50 iterations. And the MSE on the training set is 0.27, which is quite small. However, when we upload this model's prediction to Kaggle, we get 0.81 score, which is quite unacceptable!\\
+This indicates that this model is \textbf{overfitting}. Hence, we need to increase $\lambda$ a bit to overcome overfitting. When setting $\lambda = 5$, we get 0.75216 score on Kaggle, which is a good signal that we have indeed alleviated the bad effects of overfitting. After many attempts, we find that setting $\lambda = 7$ is a wise choice, and we achieve \textbf{0.74963} score on Kaggle.\\
+Below is the code for this problem.
+\inputpython{rating.py}{1}{135}
+
+
+\end{document}
